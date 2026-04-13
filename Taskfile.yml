@@ -1,0 +1,40 @@
+version: "3"
+
+tasks:
+  lint:
+    desc: "Run golangci-lint"
+    cmds:
+      - golangci-lint run
+
+  fmt:
+    desc: "Run golangci-lint formatter"
+    cmds:
+      - golangci-lint fmt
+
+  sqlc:
+    desc: "Generate Go code from SQL schema and queries"
+    cmds:
+      - sqlc generate
+
+  migrate:
+    desc: "Run database migrations (up)"
+    cmds:
+      - go run ./cmd/migrate/
+
+  run:
+    desc: "Run the HTTP server"
+    cmds:
+      - go run ./cmd/http/
+
+  dev:
+    desc: "Migrate then run the HTTP server"
+    deps: [migrate]
+    cmds:
+      - go run ./cmd/http/
+
+  build:
+    desc: "Build all binaries into bin/"
+    cmds:
+      - mkdir -p bin
+      - go build -o bin/server ./cmd/http/
+      - go build -o bin/migrate ./cmd/migrate/

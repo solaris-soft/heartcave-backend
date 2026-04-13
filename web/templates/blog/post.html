@@ -1,0 +1,9 @@
+{{define "title"}}{{.Title}} — Heartcave{{end}}
+{{define "content"}}
+<article class="max-w-2xl">
+    <a href="/blog" class="text-sm text-blue-600 hover:underline">&larr; All posts</a>
+    <h1 class="text-3xl font-bold mt-4 mb-2">{{.Title}}</h1>
+    <p class="text-sm text-gray-500 mb-8">{{.CreatedAt}}</p>
+    <div class="prose prose-gray max-w-none whitespace-pre-wrap leading-relaxed">{{.Body}}</div>
+</article>
+{{end}}

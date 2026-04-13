@@ -1,0 +1,19 @@
+{{define "title"}}Blog — Heartcave{{end}}
+{{define "content"}}
+<h1 class="text-3xl font-bold mb-8">Blog</h1>
+
+{{if .}}
+<div class="space-y-6">
+    {{range .}}
+    <article class="border-b border-gray-200 pb-6">
+        <a href="/blog/{{.Slug}}" class="group">
+            <h2 class="text-xl font-semibold group-hover:text-blue-600 transition-colors">{{.Title}}</h2>
+        </a>
+        <p class="text-sm text-gray-500 mt-1">{{.CreatedAt}}</p>
+    </article>
+    {{end}}
+</div>
+{{else}}
+<p class="text-gray-500">No posts yet.</p>
+{{end}}
+{{end}}
