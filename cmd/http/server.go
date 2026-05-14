@@ -32,6 +32,6 @@ func NewServer(router http.Handler, config *config.Config) *Server {
 func (s *Server) Start() {
 	s.config.Logger.Info("Starting server", "address", s.config.Addr)
 	if err := s.server.ListenAndServe(); err != nil {
-		s.config.Logger.Error("error starting or shutting down server", err)
+		s.config.Logger.Error("error starting or shutting down server", "err", err)
 	}
 }
