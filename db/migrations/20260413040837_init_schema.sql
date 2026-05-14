@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS posts (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     slug       TEXT    NOT NULL UNIQUE,
     title      TEXT    NOT NULL,
-    body       TEXT    NOT NULL DEFAULT '',
+    body       TEXT    NOT NULL,
     published  INTEGER NOT NULL DEFAULT 0,
     created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     updated_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))

@@ -1,7 +1,9 @@
 -- name: ListPublishedPosts :many
 SELECT id, slug, title, created_at FROM posts
 WHERE published = 1
-ORDER BY created_at DESC;
+ORDER BY created_at DESC
+LIMIT ?
+OFFSET ?;
 
 -- name: GetPostBySlug :one
 SELECT * FROM posts

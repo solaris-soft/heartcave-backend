@@ -133,7 +133,14 @@ const listPublishedPosts = `-- name: ListPublishedPosts :many
 SELECT id, slug, title, created_at FROM posts
 WHERE published = 1
 ORDER BY created_at DESC
+LIMIT ?
+OFFSET ?
 `
+
+type ListPublishedPostsParams struct {
+	Limit  int64
+	Offset int64
+}
 
 type ListPublishedPostsRow struct {
 	ID        int64
@@ -142,8 +149,8 @@ type ListPublishedPostsRow struct {
 	CreatedAt string
 }
 
-func (q *Queries) ListPublishedPosts(ctx context.Context) ([]ListPublishedPostsRow, error) {
-	rows, err := q.db.QueryContext(ctx, listPublishedPosts)
+func (q *Queries) ListPublishedPosts(ctx context.Context, arg ListPublishedPostsParams) ([]ListPublishedPostsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listPublishedPosts, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}

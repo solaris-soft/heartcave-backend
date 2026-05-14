@@ -19,6 +19,7 @@ func getEnv(key, fallback string) string {
 
 // Config holds the configuration for the application
 type Config struct {
+	Addr          string
 	Logger        *slog.Logger
 	Database      *SqliteConf
 	AdminEmail    string
@@ -48,14 +49,15 @@ func New() *Config {
 	env := getEnv("ENV", "dev")
 	dbPath := getEnv("DB_PATH", "heartcave.db")
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, logOptions(env)))
+	address := getEnv("ADDRESS", ":8080")
 
 	sessions := scs.New()
 
 	return &Config{
+		Addr:   address,
 		Logger: logger,
 		Database: &SqliteConf{
-			logger: logger,
-			path:   dbPath,
+			path: dbPath,
 		},
 		AdminEmail:    getEnv("ADMIN_EMAIL", "admin@heartcave.com"),
 		AdminPassword: getEnv("ADMIN_PASSWORD", "changeme"),
@@ -66,8 +68,7 @@ func New() *Config {
 
 // SqliteConf holds the configuration for the database
 type SqliteConf struct {
-	logger *slog.Logger
-	path   string
+	path string
 }
 
 // openDB opens the database
