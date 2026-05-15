@@ -117,3 +117,38 @@ func (q *Queries) ListSchedule(ctx context.Context) ([]AdminSchedule, error) {
 	}
 	return items, nil
 }
+
+const updateScheduleEntry = `-- name: UpdateScheduleEntry :one
+UPDATE admin_schedule
+SET day_of_week = ?, start_time = ?, end_time = ?, slot_minutes = ?
+WHERE id = ?
+RETURNING id, day_of_week, start_time, end_time, slot_minutes, created_at
+`
+
+type UpdateScheduleEntryParams struct {
+	DayOfWeek   int64
+	StartTime   string
+	EndTime     string
+	SlotMinutes int64
+	ID          int64
+}
+
+func (q *Queries) UpdateScheduleEntry(ctx context.Context, arg UpdateScheduleEntryParams) (AdminSchedule, error) {
+	row := q.db.QueryRowContext(ctx, updateScheduleEntry,
+		arg.DayOfWeek,
+		arg.StartTime,
+		arg.EndTime,
+		arg.SlotMinutes,
+		arg.ID,
+	)
+	var i AdminSchedule
+	err := row.Scan(
+		&i.ID,
+		&i.DayOfWeek,
+		&i.StartTime,
+		&i.EndTime,
+		&i.SlotMinutes,
+		&i.CreatedAt,
+	)
+	return i, err
+}

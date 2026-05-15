@@ -11,3 +11,9 @@ RETURNING *;
 
 -- name: DeleteScheduleEntry :exec
 DELETE FROM admin_schedule WHERE id = ?;
+
+-- name: UpdateScheduleEntry :one
+UPDATE admin_schedule
+SET day_of_week = ?, start_time = ?, end_time = ?, slot_minutes = ?
+WHERE id = ?
+RETURNING *;

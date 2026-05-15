@@ -1,137 +1,205 @@
 package handlers
 
 import (
-	"encoding/json"
+	"database/sql"
+	"errors"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/gosimple/slug"
 	"github.com/solaris-soft/heartcave-backend/internal/db"
-	"github.com/solaris-soft/heartcave-backend/internal/render"
 )
 
-// CreatePostRequest is a request to create a blog post
-type CreatePostRequest struct {
-	// Use the GetSlug method to ensure URL safe
-	Slug      string `json:"slug"`
-	Title     string `json:"title"`
-	Body      string `json:"body"`
-	Published int64  `json:"published"`
-}
-
-// Validate returns a map of errors where the key is the field
-// in the struct and the value is the error string safe to return
-// to the user
-func (c CreatePostRequest) Validate() (errors map[string]string) {
-	errors = map[string]string{}
-
-	if strings.TrimSpace(c.Slug) == "" {
-		errors["slug"] = "slug cannot be empty"
-	}
-
-	if strings.TrimSpace(c.Title) == "" {
-		errors["title"] = "title cannot be empty"
-	}
-
-	if strings.TrimSpace(c.Body) == "" {
-		errors["body"] = "body cannot be empty"
-	}
-
-	return errors
-}
-
-// GetSlug returns a URL safe slug
-func (c CreatePostRequest) GetSlug() string {
-	return slug.Make(c.Slug)
-}
-
-// BlogHandler is the controller for the blog posts resource
 type BlogHandler struct {
 	queries *db.Queries
 	logger  *slog.Logger
 }
 
-// NewBlogHandler is the factory for blog handlers
 func NewBlogHandler(queries *db.Queries, logger *slog.Logger) BlogHandler {
-	return BlogHandler{
-		queries: queries,
-		logger:  logger,
-	}
+	return BlogHandler{queries: queries, logger: logger}
 }
 
-// GetBlogPosts is the handler for retrieving all blog posts
-func (b BlogHandler) GetBlogPosts(w http.ResponseWriter, r *http.Request) {
-	posts, err := b.queries.ListAllPosts(r.Context())
+type postRequest struct {
+	Slug      string `json:"slug"`
+	Title     string `json:"title"`
+	Body      string `json:"body"`
+	Published bool   `json:"published"`
+}
+
+type publicPostListResponse struct {
+	Slug        string `json:"slug"`
+	Title       string `json:"title"`
+	PublishedAt string `json:"published_at"`
+}
+
+type publicPostResponse struct {
+	Slug        string `json:"slug"`
+	Title       string `json:"title"`
+	Body        string `json:"body"`
+	PublishedAt string `json:"published_at"`
+}
+
+func (h BlogHandler) ListPublished(w http.ResponseWriter, r *http.Request) {
+	limit, offset := pagination(r)
+	posts, err := h.queries.ListPublishedPosts(r.Context(), db.ListPublishedPostsParams{
+		Limit:  limit,
+		Offset: offset,
+	})
 	if err != nil {
-		render.WriteError(w, http.StatusInternalServerError, "Something went wrong.")
+		h.logger.Error("list published posts", "err", err)
+		writeError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
-
 	if posts == nil {
-		render.WriteJson(w, http.StatusOK, "No posts found")
-		return
+		posts = []db.ListPublishedPostsRow{}
 	}
-
-	render.WriteJson(w, http.StatusOK, posts)
+	response := make([]publicPostListResponse, len(posts))
+	for i, post := range posts {
+		response[i] = publicPostListResponse{
+			Slug:        post.Slug,
+			Title:       post.Title,
+			PublishedAt: post.CreatedAt,
+		}
+	}
+	writeJSON(w, http.StatusOK, response)
 }
 
-// GetBlogPostByID is the handler for retrieving a single blog post by its ID
-func (b BlogHandler) GetBlogPostByID(w http.ResponseWriter, r *http.Request) {
-	id := r.URL.Query().Get("id")
-	if id == "" {
-		render.WriteError(w, http.StatusBadRequest, "No id parameter provided.")
-		return
-	}
-
-	intID, err := strconv.Atoi(id)
+func (h BlogHandler) GetPublishedBySlug(w http.ResponseWriter, r *http.Request) {
+	post, err := h.queries.GetPostBySlug(r.Context(), chi.URLParam(r, "slug"))
 	if err != nil {
-		render.WriteError(w, http.StatusBadRequest, "ID must be an integer")
+		notFoundOrServer(w, err)
 		return
 	}
-
-	post, err := b.queries.GetPostByID(r.Context(), int64(intID))
-	if err != nil {
-		render.WriteError(w, http.StatusInternalServerError, "Something went wront.")
-		return
-	}
-
-	render.WriteJson(w, http.StatusOK, post)
+	writeJSON(w, http.StatusOK, publicPostResponse{
+		Slug:        post.Slug,
+		Title:       post.Title,
+		Body:        post.Body,
+		PublishedAt: post.CreatedAt,
+	})
 }
 
-// CreateBlogPost is the handler for creating a new blog post
-func (b BlogHandler) CreateBlogPost(w http.ResponseWriter, r *http.Request) {
-	var post CreatePostRequest
-
-	// Decode the json request
-	err := json.NewDecoder(r.Body).Decode(&post)
+func (h BlogHandler) AdminList(w http.ResponseWriter, r *http.Request) {
+	posts, err := h.queries.ListAllPosts(r.Context())
 	if err != nil {
-		render.WriteError(w, http.StatusBadRequest, "Invalid request.")
+		h.logger.Error("list all posts", "err", err)
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	if posts == nil {
+		posts = []db.Post{}
+	}
+	writeJSON(w, http.StatusOK, posts)
+}
+
+func (h BlogHandler) AdminGet(w http.ResponseWriter, r *http.Request) {
+	id, ok := routeID(r, "id")
+	if !ok {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	post, err := h.queries.GetPostByID(r.Context(), id)
+	if err != nil {
+		notFoundOrServer(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, post)
+}
+
+func (h BlogHandler) AdminCreate(w http.ResponseWriter, r *http.Request) {
+	var req postRequest
+	if !decodeJSON(r, &req) {
+		writeError(w, http.StatusBadRequest, "invalid request")
 		return
 	}
 
-	// Validate the request
-	errors := post.Validate()
-	if len(errors) != 0 {
-		render.WriteValidationErrors(w, errors)
+	params, ok := postParams(req)
+	if !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"errors": map[string]string{
+			"title": "title is required",
+			"body":  "body is required",
+		}})
 		return
 	}
 
-	params := db.CreatePostParams{
-		Slug:      post.GetSlug(),
-		Title:     post.Title,
-		Published: post.Published,
-	}
-
-	created, err := b.queries.CreatePost(r.Context(), params)
+	post, err := h.queries.CreatePost(r.Context(), params)
 	if err != nil {
-		render.WriteError(w, http.StatusBadRequest, "Invalid request.")
+		h.logger.Error("create post", "err", err)
+		writeError(w, http.StatusConflict, "slug already exists")
+		return
+	}
+	writeJSON(w, http.StatusCreated, post)
+}
+
+func (h BlogHandler) AdminUpdate(w http.ResponseWriter, r *http.Request) {
+	id, ok := routeID(r, "id")
+	if !ok {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	var req postRequest
+	if !decodeJSON(r, &req) {
+		writeError(w, http.StatusBadRequest, "invalid request")
+		return
+	}
+	params, ok := postParams(req)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "title and body are required")
 		return
 	}
 
-	err = render.WriteJson(w, http.StatusCreated, created)
+	post, err := h.queries.UpdatePost(r.Context(), db.UpdatePostParams{
+		Slug:      params.Slug,
+		Title:     params.Title,
+		Body:      params.Body,
+		Published: params.Published,
+		ID:        id,
+	})
 	if err != nil {
-		b.logger.Error("[BLOG] unable to write json response", err)
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "not found")
+			return
+		}
+		h.logger.Error("update post", "err", err)
+		writeError(w, http.StatusConflict, "slug already exists")
+		return
 	}
+	writeJSON(w, http.StatusOK, post)
+}
+
+func (h BlogHandler) AdminDelete(w http.ResponseWriter, r *http.Request) {
+	id, ok := routeID(r, "id")
+	if !ok {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	if err := h.queries.DeletePost(r.Context(), id); err != nil {
+		h.logger.Error("delete post", "err", err)
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func postParams(req postRequest) (db.CreatePostParams, bool) {
+	title := strings.TrimSpace(req.Title)
+	body := strings.TrimSpace(req.Body)
+	if title == "" || body == "" {
+		return db.CreatePostParams{}, false
+	}
+	rawSlug := strings.TrimSpace(req.Slug)
+	if rawSlug == "" {
+		rawSlug = title
+	}
+	published := int64(0)
+	if req.Published {
+		published = 1
+	}
+	return db.CreatePostParams{
+		Slug:      slug.Make(rawSlug),
+		Title:     title,
+		Body:      body,
+		Published: published,
+	}, true
 }

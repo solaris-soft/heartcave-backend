@@ -1,11 +1,11 @@
 -- name: ListCustomers :many
-SELECT * FROM customers ORDER BY created_at DESC;
+SELECT id, name, email, phone, password_hash, created_at, updated_at FROM customers ORDER BY created_at DESC;
 
 -- name: GetCustomerByID :one
-SELECT * FROM customers WHERE id = ? LIMIT 1;
+SELECT id, name, email, phone, password_hash, created_at, updated_at FROM customers WHERE id = ? LIMIT 1;
 
 -- name: GetCustomerByEmail :one
-SELECT * FROM customers WHERE email = ? LIMIT 1;
+SELECT id, name, email, phone, password_hash, created_at, updated_at FROM customers WHERE email = ? LIMIT 1;
 
 -- name: CreateCustomer :one
 INSERT INTO customers (name, email, phone)

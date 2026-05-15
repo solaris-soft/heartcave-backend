@@ -7,6 +7,7 @@ sql:
       - "./db/sql/services.sql"
       - "./db/sql/customers.sql"
       - "./db/sql/admin_schedule.sql"
+      - "./db/sql/stripe_events.sql"
     schema: "./db/sql/schema.sql"
     gen:
       go:

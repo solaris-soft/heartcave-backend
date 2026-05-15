@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS services (
 CREATE TABLE IF NOT EXISTS customers (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     name          TEXT    NOT NULL,
-    email         TEXT    NOT NULL,
+    email         TEXT    NOT NULL UNIQUE,
     phone         TEXT    NOT NULL DEFAULT '',
     password_hash TEXT    NOT NULL DEFAULT '',
     created_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
@@ -29,14 +29,31 @@ CREATE TABLE IF NOT EXISTS customers (
 );
 
 CREATE TABLE IF NOT EXISTS bookings (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    customer_id INTEGER NOT NULL REFERENCES customers(id),
-    service_id  INTEGER NOT NULL REFERENCES services(id),
-    date        TEXT    NOT NULL,
-    intentions  TEXT    NOT NULL,
-    status      TEXT    NOT NULL DEFAULT 'pending',
-    created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-    updated_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+    id                         INTEGER PRIMARY KEY AUTOINCREMENT,
+    customer_id                INTEGER NOT NULL REFERENCES customers(id),
+    service_id                 INTEGER NOT NULL REFERENCES services(id),
+    start_time                 TEXT    NOT NULL,
+    end_time                   TEXT    NOT NULL,
+    intentions                 TEXT    NOT NULL DEFAULT '',
+    status                     TEXT    NOT NULL DEFAULT 'pending',
+    payment_status             TEXT    NOT NULL DEFAULT 'unpaid',
+    stripe_checkout_session_id TEXT    NOT NULL DEFAULT '',
+    stripe_payment_intent_id   TEXT    NOT NULL DEFAULT '',
+    created_at                 TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    updated_at                 TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_bookings_customer_id ON bookings(customer_id);
+CREATE INDEX IF NOT EXISTS idx_bookings_start_time ON bookings(start_time);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_bookings_stripe_checkout_session_id
+    ON bookings(stripe_checkout_session_id)
+    WHERE stripe_checkout_session_id != '';
+
+CREATE TABLE IF NOT EXISTS stripe_events (
+    id           TEXT PRIMARY KEY,
+    event_type   TEXT NOT NULL,
+    processed_at TEXT,
+    created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
 CREATE TABLE IF NOT EXISTS admin_schedule (

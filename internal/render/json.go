@@ -24,12 +24,12 @@ func WriteError(w http.ResponseWriter, status int, message string) error {
 
 // WriteValidationErrors takes a map of errors and returns it as json
 func WriteValidationErrors(w http.ResponseWriter, errors map[string]string) {
-	jsonBytes, err := json.Marshal(errors)
-	if err != nil {
-		WriteError(w, http.StatusInternalServerError, "Something went wrong.")
-		return
-	}
-	jsonString := string(jsonBytes)
+	_ = WriteJson(w, http.StatusBadRequest, JSON{
+		"errors": errors,
+	})
+}
 
-	WriteError(w, http.StatusBadRequest, jsonString)
+// DecodeJson decodes a JSON request body into dst.
+func DecodeJson(r *http.Request, dst any) error {
+	return json.NewDecoder(r.Body).Decode(dst)
 }

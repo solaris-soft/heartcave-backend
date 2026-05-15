@@ -18,14 +18,18 @@ type AdminSchedule struct {
 }
 
 type Booking struct {
-	ID         int64
-	CustomerID int64
-	ServiceID  int64
-	Date       string
-	Intentions string
-	Status     string
-	CreatedAt  string
-	UpdatedAt  string
+	ID                      int64
+	CustomerID              int64
+	ServiceID               int64
+	StartTime               string
+	EndTime                 string
+	Intentions              string
+	Status                  string
+	PaymentStatus           string
+	StripeCheckoutSessionID string
+	StripePaymentIntentID   string
+	CreatedAt               string
+	UpdatedAt               string
 }
 
 type Customer struct {
@@ -56,4 +60,11 @@ type Service struct {
 	Minutes     int64
 	CreatedAt   string
 	UpdatedAt   string
+}
+
+type StripeEvent struct {
+	ID          string
+	EventType   string
+	ProcessedAt sql.NullString
+	CreatedAt   string
 }

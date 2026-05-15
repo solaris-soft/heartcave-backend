@@ -10,36 +10,96 @@ import (
 	"database/sql"
 )
 
+const cancelBookingByCheckoutSession = `-- name: CancelBookingByCheckoutSession :exec
+UPDATE bookings
+SET status = 'cancelled',
+    payment_status = 'failed',
+    updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+WHERE stripe_checkout_session_id = ?
+  AND payment_status != 'paid'
+`
+
+func (q *Queries) CancelBookingByCheckoutSession(ctx context.Context, stripeCheckoutSessionID string) error {
+	_, err := q.db.ExecContext(ctx, cancelBookingByCheckoutSession, stripeCheckoutSessionID)
+	return err
+}
+
+const confirmBookingByCheckoutSession = `-- name: ConfirmBookingByCheckoutSession :exec
+UPDATE bookings
+SET status = 'confirmed',
+    payment_status = 'paid',
+    stripe_payment_intent_id = ?,
+    updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+WHERE stripe_checkout_session_id = ?
+`
+
+type ConfirmBookingByCheckoutSessionParams struct {
+	StripePaymentIntentID   string
+	StripeCheckoutSessionID string
+}
+
+func (q *Queries) ConfirmBookingByCheckoutSession(ctx context.Context, arg ConfirmBookingByCheckoutSessionParams) error {
+	_, err := q.db.ExecContext(ctx, confirmBookingByCheckoutSession, arg.StripePaymentIntentID, arg.StripeCheckoutSessionID)
+	return err
+}
+
+const countOverlappingBookings = `-- name: CountOverlappingBookings :one
+SELECT count(*) FROM bookings
+WHERE status IN ('pending', 'confirmed')
+  AND start_time < ?1
+  AND end_time > ?2
+`
+
+type CountOverlappingBookingsParams struct {
+	EndTime   string
+	StartTime string
+}
+
+func (q *Queries) CountOverlappingBookings(ctx context.Context, arg CountOverlappingBookingsParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countOverlappingBookings, arg.EndTime, arg.StartTime)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createBooking = `-- name: CreateBooking :one
-INSERT INTO bookings (customer_id, service_id, date, intentions, status)
-VALUES (?, ?, ?, ?, ?)
-RETURNING id, customer_id, service_id, date, intentions, status, created_at, updated_at
+INSERT INTO bookings (customer_id, service_id, start_time, end_time, intentions, status, payment_status)
+VALUES (?, ?, ?, ?, ?, ?, ?)
+RETURNING id, customer_id, service_id, start_time, end_time, intentions, status, payment_status, stripe_checkout_session_id, stripe_payment_intent_id, created_at, updated_at
 `
 
 type CreateBookingParams struct {
-	CustomerID int64
-	ServiceID  int64
-	Date       string
-	Intentions string
-	Status     string
+	CustomerID    int64
+	ServiceID     int64
+	StartTime     string
+	EndTime       string
+	Intentions    string
+	Status        string
+	PaymentStatus string
 }
 
 func (q *Queries) CreateBooking(ctx context.Context, arg CreateBookingParams) (Booking, error) {
 	row := q.db.QueryRowContext(ctx, createBooking,
 		arg.CustomerID,
 		arg.ServiceID,
-		arg.Date,
+		arg.StartTime,
+		arg.EndTime,
 		arg.Intentions,
 		arg.Status,
+		arg.PaymentStatus,
 	)
 	var i Booking
 	err := row.Scan(
 		&i.ID,
 		&i.CustomerID,
 		&i.ServiceID,
-		&i.Date,
+		&i.StartTime,
+		&i.EndTime,
 		&i.Intentions,
 		&i.Status,
+		&i.PaymentStatus,
+		&i.StripeCheckoutSessionID,
+		&i.StripePaymentIntentID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -57,7 +117,18 @@ func (q *Queries) DeleteBooking(ctx context.Context, id int64) error {
 
 const getBookingByID = `-- name: GetBookingByID :one
 SELECT
-    b.id, b.customer_id, b.service_id, b.date, b.intentions, b.status, b.created_at, b.updated_at,
+    b.id,
+    b.customer_id,
+    b.service_id,
+    b.start_time,
+    b.end_time,
+    b.intentions,
+    b.status,
+    b.payment_status,
+    b.stripe_checkout_session_id,
+    b.stripe_payment_intent_id,
+    b.created_at,
+    b.updated_at,
     c.name AS customer_name,
     c.email AS customer_email,
     c.phone AS customer_phone,
@@ -73,21 +144,25 @@ LIMIT 1
 `
 
 type GetBookingByIDRow struct {
-	ID                 int64
-	CustomerID         int64
-	ServiceID          int64
-	Date               string
-	Intentions         string
-	Status             string
-	CreatedAt          string
-	UpdatedAt          string
-	CustomerName       string
-	CustomerEmail      string
-	CustomerPhone      string
-	ServiceName        string
-	ServiceDescription sql.NullString
-	ServicePrice       int64
-	ServiceMinutes     int64
+	ID                      int64
+	CustomerID              int64
+	ServiceID               int64
+	StartTime               string
+	EndTime                 string
+	Intentions              string
+	Status                  string
+	PaymentStatus           string
+	StripeCheckoutSessionID string
+	StripePaymentIntentID   string
+	CreatedAt               string
+	UpdatedAt               string
+	CustomerName            string
+	CustomerEmail           string
+	CustomerPhone           string
+	ServiceName             string
+	ServiceDescription      sql.NullString
+	ServicePrice            int64
+	ServiceMinutes          int64
 }
 
 func (q *Queries) GetBookingByID(ctx context.Context, id int64) (GetBookingByIDRow, error) {
@@ -97,9 +172,13 @@ func (q *Queries) GetBookingByID(ctx context.Context, id int64) (GetBookingByIDR
 		&i.ID,
 		&i.CustomerID,
 		&i.ServiceID,
-		&i.Date,
+		&i.StartTime,
+		&i.EndTime,
 		&i.Intentions,
 		&i.Status,
+		&i.PaymentStatus,
+		&i.StripeCheckoutSessionID,
+		&i.StripePaymentIntentID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CustomerName,
@@ -118,9 +197,13 @@ SELECT
     b.id,
     b.customer_id,
     b.service_id,
-    b.date,
+    b.start_time,
+    b.end_time,
     b.intentions,
     b.status,
+    b.payment_status,
+    b.stripe_checkout_session_id,
+    b.stripe_payment_intent_id,
     b.created_at,
     b.updated_at,
     c.name AS customer_name,
@@ -132,24 +215,28 @@ SELECT
 FROM bookings b
 JOIN customers c ON c.id = b.customer_id
 JOIN services s ON s.id = b.service_id
-ORDER BY b.date DESC
+ORDER BY b.start_time DESC
 `
 
 type ListBookingsRow struct {
-	ID             int64
-	CustomerID     int64
-	ServiceID      int64
-	Date           string
-	Intentions     string
-	Status         string
-	CreatedAt      string
-	UpdatedAt      string
-	CustomerName   string
-	CustomerEmail  string
-	CustomerPhone  string
-	ServiceName    string
-	ServicePrice   int64
-	ServiceMinutes int64
+	ID                      int64
+	CustomerID              int64
+	ServiceID               int64
+	StartTime               string
+	EndTime                 string
+	Intentions              string
+	Status                  string
+	PaymentStatus           string
+	StripeCheckoutSessionID string
+	StripePaymentIntentID   string
+	CreatedAt               string
+	UpdatedAt               string
+	CustomerName            string
+	CustomerEmail           string
+	CustomerPhone           string
+	ServiceName             string
+	ServicePrice            int64
+	ServiceMinutes          int64
 }
 
 func (q *Queries) ListBookings(ctx context.Context) ([]ListBookingsRow, error) {
@@ -165,9 +252,13 @@ func (q *Queries) ListBookings(ctx context.Context) ([]ListBookingsRow, error) {
 			&i.ID,
 			&i.CustomerID,
 			&i.ServiceID,
-			&i.Date,
+			&i.StartTime,
+			&i.EndTime,
 			&i.Intentions,
 			&i.Status,
+			&i.PaymentStatus,
+			&i.StripeCheckoutSessionID,
+			&i.StripePaymentIntentID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.CustomerName,
@@ -192,26 +283,43 @@ func (q *Queries) ListBookings(ctx context.Context) ([]ListBookingsRow, error) {
 
 const listBookingsByCustomer = `-- name: ListBookingsByCustomer :many
 SELECT
-    b.id, b.customer_id, b.service_id, b.date, b.intentions, b.status, b.created_at, b.updated_at,
+    b.id,
+    b.customer_id,
+    b.service_id,
+    b.start_time,
+    b.end_time,
+    b.intentions,
+    b.status,
+    b.payment_status,
+    b.stripe_checkout_session_id,
+    b.stripe_payment_intent_id,
+    b.created_at,
+    b.updated_at,
     s.name AS service_name,
-    s.price AS service_price
+    s.price AS service_price,
+    s.minutes AS service_minutes
 FROM bookings b
 JOIN services s ON s.id = b.service_id
 WHERE b.customer_id = ?
-ORDER BY b.date DESC
+ORDER BY b.start_time DESC
 `
 
 type ListBookingsByCustomerRow struct {
-	ID           int64
-	CustomerID   int64
-	ServiceID    int64
-	Date         string
-	Intentions   string
-	Status       string
-	CreatedAt    string
-	UpdatedAt    string
-	ServiceName  string
-	ServicePrice int64
+	ID                      int64
+	CustomerID              int64
+	ServiceID               int64
+	StartTime               string
+	EndTime                 string
+	Intentions              string
+	Status                  string
+	PaymentStatus           string
+	StripeCheckoutSessionID string
+	StripePaymentIntentID   string
+	CreatedAt               string
+	UpdatedAt               string
+	ServiceName             string
+	ServicePrice            int64
+	ServiceMinutes          int64
 }
 
 func (q *Queries) ListBookingsByCustomer(ctx context.Context, customerID int64) ([]ListBookingsByCustomerRow, error) {
@@ -227,13 +335,18 @@ func (q *Queries) ListBookingsByCustomer(ctx context.Context, customerID int64) 
 			&i.ID,
 			&i.CustomerID,
 			&i.ServiceID,
-			&i.Date,
+			&i.StartTime,
+			&i.EndTime,
 			&i.Intentions,
 			&i.Status,
+			&i.PaymentStatus,
+			&i.StripeCheckoutSessionID,
+			&i.StripePaymentIntentID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.ServiceName,
 			&i.ServicePrice,
+			&i.ServiceMinutes,
 		); err != nil {
 			return nil, err
 		}
@@ -248,12 +361,20 @@ func (q *Queries) ListBookingsByCustomer(ctx context.Context, customerID int64) 
 	return items, nil
 }
 
-const listBookingsByDate = `-- name: ListBookingsByDate :many
-SELECT id, customer_id, service_id, date, intentions, status, created_at, updated_at FROM bookings WHERE date = ? ORDER BY date ASC
+const listBookingsByDateRange = `-- name: ListBookingsByDateRange :many
+SELECT id, customer_id, service_id, start_time, end_time, intentions, status, payment_status, stripe_checkout_session_id, stripe_payment_intent_id, created_at, updated_at FROM bookings
+WHERE start_time >= ?1 AND start_time < ?2
+  AND status IN ('pending', 'confirmed')
+ORDER BY start_time ASC
 `
 
-func (q *Queries) ListBookingsByDate(ctx context.Context, date string) ([]Booking, error) {
-	rows, err := q.db.QueryContext(ctx, listBookingsByDate, date)
+type ListBookingsByDateRangeParams struct {
+	DayStart string
+	DayEnd   string
+}
+
+func (q *Queries) ListBookingsByDateRange(ctx context.Context, arg ListBookingsByDateRangeParams) ([]Booking, error) {
+	rows, err := q.db.QueryContext(ctx, listBookingsByDateRange, arg.DayStart, arg.DayEnd)
 	if err != nil {
 		return nil, err
 	}
@@ -265,9 +386,13 @@ func (q *Queries) ListBookingsByDate(ctx context.Context, date string) ([]Bookin
 			&i.ID,
 			&i.CustomerID,
 			&i.ServiceID,
-			&i.Date,
+			&i.StartTime,
+			&i.EndTime,
 			&i.Intentions,
 			&i.Status,
+			&i.PaymentStatus,
+			&i.StripeCheckoutSessionID,
+			&i.StripePaymentIntentID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -289,9 +414,11 @@ SELECT
     b.id,
     b.customer_id,
     b.service_id,
-    b.date,
+    b.start_time,
+    b.end_time,
     b.intentions,
     b.status,
+    b.payment_status,
     b.created_at,
     c.name AS customer_name,
     c.email AS customer_email,
@@ -300,16 +427,18 @@ FROM bookings b
 JOIN customers c ON c.id = b.customer_id
 JOIN services s ON s.id = b.service_id
 WHERE b.status = ?
-ORDER BY b.date DESC
+ORDER BY b.start_time DESC
 `
 
 type ListBookingsByStatusRow struct {
 	ID            int64
 	CustomerID    int64
 	ServiceID     int64
-	Date          string
+	StartTime     string
+	EndTime       string
 	Intentions    string
 	Status        string
+	PaymentStatus string
 	CreatedAt     string
 	CustomerName  string
 	CustomerEmail string
@@ -329,9 +458,11 @@ func (q *Queries) ListBookingsByStatus(ctx context.Context, status string) ([]Li
 			&i.ID,
 			&i.CustomerID,
 			&i.ServiceID,
-			&i.Date,
+			&i.StartTime,
+			&i.EndTime,
 			&i.Intentions,
 			&i.Status,
+			&i.PaymentStatus,
 			&i.CreatedAt,
 			&i.CustomerName,
 			&i.CustomerEmail,
@@ -350,30 +481,51 @@ func (q *Queries) ListBookingsByStatus(ctx context.Context, status string) ([]Li
 	return items, nil
 }
 
-const updateBooking = `-- name: UpdateBooking :one
+const setBookingCheckoutSession = `-- name: SetBookingCheckoutSession :exec
 UPDATE bookings
-SET customer_id = ?, service_id = ?, date = ?, intentions = ?, status = ?,
+SET stripe_checkout_session_id = ?,
     updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
 WHERE id = ?
-RETURNING id, customer_id, service_id, date, intentions, status, created_at, updated_at
+`
+
+type SetBookingCheckoutSessionParams struct {
+	StripeCheckoutSessionID string
+	ID                      int64
+}
+
+func (q *Queries) SetBookingCheckoutSession(ctx context.Context, arg SetBookingCheckoutSessionParams) error {
+	_, err := q.db.ExecContext(ctx, setBookingCheckoutSession, arg.StripeCheckoutSessionID, arg.ID)
+	return err
+}
+
+const updateBooking = `-- name: UpdateBooking :one
+UPDATE bookings
+SET customer_id = ?, service_id = ?, start_time = ?, end_time = ?, intentions = ?, status = ?, payment_status = ?,
+    updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+WHERE id = ?
+RETURNING id, customer_id, service_id, start_time, end_time, intentions, status, payment_status, stripe_checkout_session_id, stripe_payment_intent_id, created_at, updated_at
 `
 
 type UpdateBookingParams struct {
-	CustomerID int64
-	ServiceID  int64
-	Date       string
-	Intentions string
-	Status     string
-	ID         int64
+	CustomerID    int64
+	ServiceID     int64
+	StartTime     string
+	EndTime       string
+	Intentions    string
+	Status        string
+	PaymentStatus string
+	ID            int64
 }
 
 func (q *Queries) UpdateBooking(ctx context.Context, arg UpdateBookingParams) (Booking, error) {
 	row := q.db.QueryRowContext(ctx, updateBooking,
 		arg.CustomerID,
 		arg.ServiceID,
-		arg.Date,
+		arg.StartTime,
+		arg.EndTime,
 		arg.Intentions,
 		arg.Status,
+		arg.PaymentStatus,
 		arg.ID,
 	)
 	var i Booking
@@ -381,13 +533,36 @@ func (q *Queries) UpdateBooking(ctx context.Context, arg UpdateBookingParams) (B
 		&i.ID,
 		&i.CustomerID,
 		&i.ServiceID,
-		&i.Date,
+		&i.StartTime,
+		&i.EndTime,
 		&i.Intentions,
 		&i.Status,
+		&i.PaymentStatus,
+		&i.StripeCheckoutSessionID,
+		&i.StripePaymentIntentID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const updateBookingPayment = `-- name: UpdateBookingPayment :exec
+UPDATE bookings
+SET payment_status = ?,
+    stripe_payment_intent_id = ?,
+    updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+WHERE id = ?
+`
+
+type UpdateBookingPaymentParams struct {
+	PaymentStatus         string
+	StripePaymentIntentID string
+	ID                    int64
+}
+
+func (q *Queries) UpdateBookingPayment(ctx context.Context, arg UpdateBookingPaymentParams) error {
+	_, err := q.db.ExecContext(ctx, updateBookingPayment, arg.PaymentStatus, arg.StripePaymentIntentID, arg.ID)
+	return err
 }
 
 const updateBookingStatus = `-- name: UpdateBookingStatus :exec
