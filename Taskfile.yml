@@ -19,54 +19,9 @@ tasks:
   migrate:
     desc: "Run database migrations (up)"
     cmds:
-      - go run ./cmd/migrate/
+      - goose postgres "postgres://postgres:postgres@localhost:5432/heartcave" up -dir database/migrations
 
   run:
     desc: "Run the HTTP server"
     cmds:
       - go run ./cmd/http/
-
-  dev:
-    desc: "Migrate then run the HTTP server"
-    deps: [migrate]
-    cmds:
-      - go run ./cmd/http/
-
-  build:
-    desc: "Build all binaries into bin/"
-    cmds:
-      - mkdir -p bin
-      - go build -o bin/server ./cmd/http/
-      - go build -o bin/migrate ./cmd/migrate/
-
-  test:
-    desc: "Run all tests with race detection"
-    cmds:
-      - go test -race ./...
-
-  test:unit:
-    desc: "Run unit tests only (skip integration)"
-    cmds:
-      - go test -short -race ./...
-
-  test:integration:
-    desc: "Run integration tests only"
-    cmds:
-      - go test -run Integration -race ./...
-
-  test:coverage:
-    desc: "Run tests and generate coverage report"
-    cmds:
-      - go test -coverprofile=coverage.out -race ./...
-      - go tool cover -func=coverage.out
-
-  test:coverage:html:
-    desc: "Run tests and open HTML coverage report"
-    cmds:
-      - go test -coverprofile=coverage.out -race ./...
-      - go tool cover -html=coverage.out
-
-  bench:
-    desc: "Run benchmark tests"
-    cmds:
-      - go test -bench=. -benchmem ./...

@@ -1,15 +1,12 @@
 version: "2"
 sql:
-  - engine: "sqlite"
-    queries:
-      - "./db/sql/blog.sql"
-      - "./db/sql/bookings.sql"
-      - "./db/sql/services.sql"
-      - "./db/sql/customers.sql"
-      - "./db/sql/admin_schedule.sql"
-      - "./db/sql/stripe_events.sql"
-    schema: "./db/sql/schema.sql"
+  - engine: "postgresql"
+    queries: "./database/queries/"
+    schema: "./database/migrations/"
     gen:
       go:
-        package: "db"
-        out: "internal/db"
+        package: "database"
+        out: "internal/database"
+        sql_driver: "github.com/lib/pq"
+        emit_json_tags: true
+        emit_interface: true
