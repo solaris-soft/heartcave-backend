@@ -3,8 +3,10 @@ package main
 import (
 	"database/sql"
 	"log"
+	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/httprate"
 	_ "github.com/lib/pq"
 	"github.com/solaris-soft/heartcave-backend/internal/config"
 	"github.com/solaris-soft/heartcave-backend/internal/database"
@@ -15,9 +17,10 @@ import (
 func main() {
 	cfg := config.New()
 	db, err := sql.Open("postgres", cfg.DBURL)
-	if err != nil {
+	if err != nil || db.Ping() != nil {
 		log.Fatal("Failed to connect to database")
 	}
+	defer db.Close()
 	queries := database.New(db)
 
 	r := NewRouter(cfg)
@@ -28,14 +31,20 @@ func main() {
 
 	r.Get("/healthz", handlers.HealthHandler)
 	r.Route("/v1/api", func(r chi.Router) {
-		r.Post("/login", authHandler.Login)
-		r.Post("/register", authHandler.CreateUser)
+		// Rate limited routes
+		r.With(httprate.LimitByIP(10, time.Minute)).
+			Group(func(r chi.Router) {
+				r.Post("/login", authHandler.Login)
+				r.Post("/register", authHandler.CreateUser)
+			})
 
+		// Auth routes
 		r.With(authHandler.AuthMiddleware).
 			Group(func(r chi.Router) {
 				r.Post("/logout", authHandler.Logout)
 			})
 
+		// Refresh token route
 		r.With(authHandler.RefreshMiddleware).
 			Post("/refresh", authHandler.Refresh)
 	})
