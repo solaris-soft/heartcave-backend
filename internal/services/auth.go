@@ -4,9 +4,14 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"log"
+	"net/http"
+	"strings"
 	"time"
 
+	"github.com/alexedwards/argon2id"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
@@ -30,6 +35,7 @@ func (a AuthService) MakeAccessToken(userID uuid.UUID) (string, error) {
 	claims := jwt.RegisteredClaims{
 		Subject:   userID.String(),
 		Issuer:    "heartcave",
+		Audience:  jwt.ClaimStrings{"public-api"},
 		IssuedAt:  jwt.NewNumericDate(time.Now()),
 		ExpiresAt: jwt.NewNumericDate(time.Now().Add(AccessTokenExpiry)),
 	}
@@ -39,9 +45,16 @@ func (a AuthService) MakeAccessToken(userID uuid.UUID) (string, error) {
 	return token.SignedString([]byte(a.secretKey))
 }
 
+func (a AuthService) ValidatePassword(password string) bool {
+	return len(password) >= 8
+}
+
 func (a AuthService) ValidateAccessToken(tokenString string) (uuid.UUID, error) {
 	claims := &jwt.RegisteredClaims{}
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (any, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
 		return []byte(a.secretKey), nil
 	})
 	if err != nil {
@@ -72,4 +85,24 @@ func (a AuthService) NewRefreshToken() (string, error) {
 func (a AuthService) HashRefreshToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])
+}
+
+func (a AuthService) HashPassword(password string) (string, error) {
+	return argon2id.CreateHash(password, argon2id.DefaultParams)
+}
+
+func (a AuthService) CompareHashPassword(password, hash string) (bool, error) {
+	return argon2id.ComparePasswordAndHash(password, hash)
+}
+
+func (a AuthService) GetBearerToken(headers http.Header) (string, error) {
+	authHeader := headers.Get("Authorization")
+	if authHeader == "" {
+		return "", errors.New("no authorization header provided")
+	}
+	parts := strings.SplitN(authHeader, " ", 2)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		return "", errors.New("malformed authorization header")
+	}
+	return parts[1], nil
 }

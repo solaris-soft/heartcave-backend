@@ -9,4 +9,4 @@ updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- +goose Down
-DROP TABLE users;
+DROP TABLE users;  

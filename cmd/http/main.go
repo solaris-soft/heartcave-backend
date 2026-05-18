@@ -29,9 +29,15 @@ func main() {
 	r.Get("/healthz", handlers.HealthHandler)
 	r.Route("/v1/api", func(r chi.Router) {
 		r.Post("/login", authHandler.Login)
-		r.Post("/refresh", authHandler.Refresh)
-		r.Post("/logout", authHandler.Logout)
 		r.Post("/register", authHandler.CreateUser)
+
+		r.With(authHandler.AuthMiddleware).
+			Group(func(r chi.Router) {
+				r.Post("/logout", authHandler.Logout)
+			})
+
+		r.With(authHandler.RefreshMiddleware).
+			Post("/refresh", authHandler.Refresh)
 	})
 
 	srv := NewServer(r, cfg)
