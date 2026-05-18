@@ -63,6 +63,7 @@ type Booking struct {
 	EndsAt                  time.Time      `json:"ends_at"`
 	Status                  string         `json:"status"`
 	ServiceName             string         `json:"service_name"`
+	ServicePrice            interface{}    `json:"service_price"`
 	CustomerNotes           sql.NullString `json:"customer_notes"`
 	StripeCheckoutSessionID sql.NullString `json:"stripe_checkout_session_id"`
 	StripePaymentIntentID   sql.NullString `json:"stripe_payment_intent_id"`
@@ -101,6 +102,11 @@ type ServiceAvailability struct {
 	EndTime   time.Time `json:"end_time"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type StripeWebhookEvent struct {
+	ID          string    `json:"id"`
+	ProcessedAt time.Time `json:"processed_at"`
 }
 
 type User struct {

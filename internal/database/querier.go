@@ -6,12 +6,15 @@ package database
 
 import (
 	"context"
+	"database/sql"
 
 	"github.com/google/uuid"
 )
 
 type Querier interface {
 	CreateAvailability(ctx context.Context, arg CreateAvailabilityParams) (ServiceAvailability, error)
+	CreateBooking(ctx context.Context, arg CreateBookingParams) (Booking, error)
+	CreateProcessedStripeEvent(ctx context.Context, id string) error
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) (RefreshToken, error)
 	CreateService(ctx context.Context, arg CreateServiceParams) (Service, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
@@ -21,14 +24,19 @@ type Querier interface {
 	GetAllServices(ctx context.Context) ([]Service, error)
 	GetAvailabilityByID(ctx context.Context, id uuid.UUID) (ServiceAvailability, error)
 	GetAvailabilityByServiceID(ctx context.Context, serviceID uuid.UUID) ([]ServiceAvailability, error)
+	GetBookingByCheckoutID(ctx context.Context, stripeCheckoutSessionID sql.NullString) (Booking, error)
+	GetOverlappingBookings(ctx context.Context, arg GetOverlappingBookingsParams) ([]Booking, error)
 	GetRefreshTokenByHash(ctx context.Context, tokenHash string) (RefreshToken, error)
 	GetServiceByID(ctx context.Context, id uuid.UUID) (Service, error)
 	GetServiceByName(ctx context.Context, name string) (Service, error)
+	GetStripeEventByID(ctx context.Context, id string) (StripeWebhookEvent, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
 	RevokeAllUserRefreshTokens(ctx context.Context, userID uuid.UUID) error
 	RevokeRefreshToken(ctx context.Context, tokenHash string) error
 	UpdateAvailabilityByID(ctx context.Context, arg UpdateAvailabilityByIDParams) (ServiceAvailability, error)
+	UpdateBookingToFailed(ctx context.Context, stripePaymentIntentID sql.NullString) (Booking, error)
+	UpdateBookingToPaid(ctx context.Context, arg UpdateBookingToPaidParams) (Booking, error)
 	UpdateServiceByID(ctx context.Context, arg UpdateServiceByIDParams) (Service, error)
 	UpdateUserByEmail(ctx context.Context, arg UpdateUserByEmailParams) error
 	UpdateUserByID(ctx context.Context, arg UpdateUserByIDParams) (User, error)

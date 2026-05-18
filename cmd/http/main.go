@@ -12,29 +12,41 @@ import (
 	"github.com/solaris-soft/heartcave-backend/internal/database"
 	"github.com/solaris-soft/heartcave-backend/internal/handlers"
 	"github.com/solaris-soft/heartcave-backend/internal/services"
+	"github.com/stripe/stripe-go/v85"
 )
 
 func main() {
 	cfg := config.New()
 	db, err := sql.Open("postgres", cfg.DBURL)
-	if err != nil || db.Ping() != nil {
+	if err != nil {
 		log.Fatal("Failed to connect to database")
+	}
+	if err = db.Ping(); err != nil {
+		log.Fatalf("Failed to ping database: %v", err)
 	}
 	defer db.Close()
 	queries := database.New(db)
 
 	r := NewRouter(cfg)
 
+	// Services
 	authService := services.NewAuthService(cfg.JWTSecret)
+	stripeClient := stripe.NewClient(cfg.StripeSecretKey)
+	stripeService := services.NewStripeWebhookService(queries)
+	bookingService := services.NewBookingService(queries, stripeClient, cfg.StripeCurrency)
 
-	authHandler := handlers.NewAuthHandler(queries, authService)
-
+	// Handlers
 	servicesHandler := handlers.NewServicesHandler(queries)
-
+	authHandler := handlers.NewAuthHandler(queries, authService)
 	availabilityHandler := handlers.NewServiceAvailabilityHandler(queries)
+	stripeWebhookHandler := handlers.NewStripeWebhookHandler(cfg.StripeWebhookSecret, stripeService)
+	bookingsHandler := handlers.BookingsHandler{BookingService: bookingService}
 
 	r.Get("/healthz", handlers.HealthHandler)
 	r.Route("/v1/api", func(r chi.Router) {
+		// Webhooks
+		r.Post("/webhooks/stripe", stripeWebhookHandler.HandleStripeWebHook)
+
 		// Rate limited routes
 		r.With(httprate.LimitByIP(10, time.Minute)).
 			Group(func(r chi.Router) {
@@ -47,6 +59,9 @@ func main() {
 			Group(func(r chi.Router) {
 				r.Post("/logout", authHandler.Logout)
 				r.Put("/users", authHandler.UpdateUser)
+
+				// Bookings
+				r.Post("/bookings", bookingsHandler.CreateBooking)
 			})
 
 		// Refresh token route

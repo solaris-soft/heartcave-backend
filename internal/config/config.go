@@ -41,22 +41,20 @@ type Config struct {
 func New() *Config {
 	godotenv.Load()
 	address := getEnv("ADDRESS", ":8080")
-	jwtSecret := mustEnv("SECRET_KEY")
-	dbURL := mustEnv("DB_URL")
 
 	return &Config{
 		Addr:  address,
-		DBURL: dbURL,
+		DBURL: mustEnv("DB_URL"),
 		Logger: slog.New(slog.NewJSONHandler(
 			os.Stdout,
 			&slog.HandlerOptions{
 				Level: slog.LevelDebug,
 			},
 		)),
-		JWTSecret:           jwtSecret,
+		JWTSecret:           mustEnv("SECRET_KEY"),
 		AppTimezone:         getEnv("APP_TIMEZONE", "Australia/Perth"),
 		StripeSecretKey:     getEnv("STRIPE_SECRET_KEY", ""),
-		StripeWebhookSecret: getEnv("STRIPE_WEBHOOK_SECRET", ""),
+		StripeWebhookSecret: mustEnv("STRIPE_WEBHOOK_SECRET"),
 		StripeCurrency:      getEnv("STRIPE_CURRENCY", "aud"),
 	}
 }
