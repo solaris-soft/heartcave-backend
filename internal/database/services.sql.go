@@ -131,7 +131,7 @@ func (q *Queries) GetServiceByName(ctx context.Context, name string) (Service, e
 
 const updateServiceByID = `-- name: UpdateServiceByID :one
 UPDATE services
-SET name = $1, price = $2, description = $3, session_minutes = $4
+SET name = $1, price = $2, description = $3, session_minutes = $4, updated_at = now()
 WHERE id = $5
 RETURNING id, name, price, description, session_minutes, created_at, updated_at
 `

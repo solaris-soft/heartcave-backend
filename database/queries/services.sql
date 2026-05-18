@@ -16,7 +16,7 @@ WHERE id = $1;
 
 -- name: UpdateServiceByID :one
 UPDATE services
-SET name = $1, price = $2, description = $3, session_minutes = $4
+SET name = $1, price = $2, description = $3, session_minutes = $4, updated_at = now()
 WHERE id = $5
 RETURNING *;
 

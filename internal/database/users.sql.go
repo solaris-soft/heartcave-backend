@@ -98,7 +98,8 @@ func (q *Queries) UpdateUserByEmail(ctx context.Context, arg UpdateUserByEmailPa
 const updateUserByID = `-- name: UpdateUserByID :one
 UPDATE users
 SET email = COALESCE($1, email),
-    password_hash = COALESCE($2, password_hash)
+    password_hash = COALESCE($2, password_hash),
+    updated_at = now()
 WHERE id = $3
 RETURNING id, name, email, role, password_hash, created_at, updated_at
 `

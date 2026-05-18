@@ -19,6 +19,7 @@ WHERE email = $2;
 -- name: UpdateUserByID :one
 UPDATE users
 SET email = COALESCE(sqlc.narg(email), email),
-    password_hash = COALESCE(sqlc.narg(password_hash), password_hash)
+    password_hash = COALESCE(sqlc.narg(password_hash), password_hash),
+    updated_at = now()
 WHERE id = @id
 RETURNING *;

@@ -93,6 +93,16 @@ type Service struct {
 	UpdatedAt      time.Time `json:"updated_at"`
 }
 
+type ServiceAvailability struct {
+	ID        uuid.UUID `json:"id"`
+	ServiceID uuid.UUID `json:"service_id"`
+	DayOfWeek int16     `json:"day_of_week"`
+	StartTime time.Time `json:"start_time"`
+	EndTime   time.Time `json:"end_time"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 type User struct {
 	ID           uuid.UUID `json:"id"`
 	Name         string    `json:"name"`

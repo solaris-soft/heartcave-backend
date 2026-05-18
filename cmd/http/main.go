@@ -31,6 +31,8 @@ func main() {
 
 	servicesHandler := handlers.NewServicesHandler(queries)
 
+	availabilityHandler := handlers.NewServiceAvailabilityHandler(queries)
+
 	r.Get("/healthz", handlers.HealthHandler)
 	r.Route("/v1/api", func(r chi.Router) {
 		// Rate limited routes
@@ -60,6 +62,14 @@ func main() {
 				r.Post("/services", servicesHandler.CreateService)
 				r.Patch("/services/{id}", servicesHandler.UpdateService)
 				r.Delete("/services/{id}", servicesHandler.DeleteService)
+
+				// Availability routes
+				r.Get("/availability", availabilityHandler.GetAllAvailability)
+				r.Get("/availability/{id}", availabilityHandler.GetAvailability)
+				r.Get("/services/{service_id}/availability", availabilityHandler.GetAvailabilityByService)
+				r.Post("/availability", availabilityHandler.CreateAvailability)
+				r.Patch("/availability/{id}", availabilityHandler.UpdateAvailability)
+				r.Delete("/availability/{id}", availabilityHandler.DeleteAvailability)
 			})
 	})
 
