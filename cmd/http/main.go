@@ -29,6 +29,8 @@ func main() {
 
 	authHandler := handlers.NewAuthHandler(queries, authService)
 
+	servicesHandler := handlers.NewServicesHandler(queries)
+
 	r.Get("/healthz", handlers.HealthHandler)
 	r.Route("/v1/api", func(r chi.Router) {
 		// Rate limited routes
@@ -42,6 +44,7 @@ func main() {
 		r.With(authHandler.AuthMiddleware).
 			Group(func(r chi.Router) {
 				r.Post("/logout", authHandler.Logout)
+				r.Put("/users", authHandler.UpdateUser)
 			})
 
 		// Refresh token route
@@ -51,7 +54,12 @@ func main() {
 		// Admin-only routes
 		r.With(authHandler.AuthMiddleware, handlers.RequireRole("admin")).
 			Group(func(r chi.Router) {
-				_ = r // placeholder -- add admin routes here
+				// Services routes
+				r.Get("/services", servicesHandler.GetServices)
+				r.Get("/services/{id}", servicesHandler.GetService)
+				r.Post("/services", servicesHandler.CreateService)
+				r.Patch("/services/{id}", servicesHandler.UpdateService)
+				r.Delete("/services/{id}", servicesHandler.DeleteService)
 			})
 	})
 

@@ -15,6 +15,11 @@ import (
 	"github.com/solaris-soft/heartcave-backend/internal/services"
 )
 
+type UpdateUserRequest struct {
+	Email    *string `json:"email"`
+	Password *string `json:"password"`
+}
+
 type AuthHandler struct {
 	DB          database.Querier
 	AuthService services.AuthService
@@ -238,6 +243,68 @@ func (h AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h AuthHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
+	userID, ok := r.Context().Value(userIDKey).(uuid.UUID)
+	if !ok {
+		WriteUnauthorized(w)
+		return
+	}
+
+	var req UpdateUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		WriteBadRequest(w)
+		return
+	}
+
+	if req.Email == nil && req.Password == nil {
+		WriteBadRequest(w)
+		return
+	}
+
+	var email sql.NullString
+	var passwordHash sql.NullString
+
+	if req.Email != nil {
+		validated, err := validateEmail(*req.Email)
+		if err != nil {
+			WriteBadRequest(w)
+			return
+		}
+		email = sql.NullString{String: validated, Valid: true}
+	}
+
+	if req.Password != nil {
+		if !h.AuthService.ValidatePassword(*req.Password) {
+			WriteBadRequest(w)
+			return
+		}
+		hash, err := h.AuthService.HashPassword(*req.Password)
+		if err != nil {
+			WriteInternalError(w)
+			return
+		}
+		passwordHash = sql.NullString{String: hash, Valid: true}
+	}
+
+	user, err := h.DB.UpdateUserByID(r.Context(), database.UpdateUserByIDParams{
+		ID:           userID,
+		Email:        email,
+		PasswordHash: passwordHash,
+	})
+	if err != nil {
+		WriteInternalError(w)
+		return
+	}
+
+	WriteJSON(w, http.StatusOK, UserResponse{
+		ID:        user.ID,
+		Name:      user.Name,
+		Email:     user.Email,
+		CreatedAt: user.CreatedAt,
+		UpdatedAt: user.UpdatedAt,
+	})
 }
 
 type UserIDKey struct{}

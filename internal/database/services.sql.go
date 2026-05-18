@@ -7,6 +7,8 @@ package database
 
 import (
 	"context"
+
+	"github.com/google/uuid"
 )
 
 const createService = `-- name: CreateService :one
@@ -40,6 +42,16 @@ func (q *Queries) CreateService(ctx context.Context, arg CreateServiceParams) (S
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const deleteServiceByID = `-- name: DeleteServiceByID :exec
+DELETE FROM services
+WHERE id = $1
+`
+
+func (q *Queries) DeleteServiceByID(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, deleteServiceByID, id)
+	return err
 }
 
 const getAllServices = `-- name: GetAllServices :many
@@ -77,6 +89,26 @@ func (q *Queries) GetAllServices(ctx context.Context) ([]Service, error) {
 	return items, nil
 }
 
+const getServiceByID = `-- name: GetServiceByID :one
+SELECT id, name, price, description, session_minutes, created_at, updated_at FROM services
+WHERE id = $1
+`
+
+func (q *Queries) GetServiceByID(ctx context.Context, id uuid.UUID) (Service, error) {
+	row := q.db.QueryRowContext(ctx, getServiceByID, id)
+	var i Service
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Price,
+		&i.Description,
+		&i.SessionMinutes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getServiceByName = `-- name: GetServiceByName :one
 SELECT id, name, price, description, session_minutes, created_at, updated_at FROM services
 WHERE name = $1
@@ -84,6 +116,42 @@ WHERE name = $1
 
 func (q *Queries) GetServiceByName(ctx context.Context, name string) (Service, error) {
 	row := q.db.QueryRowContext(ctx, getServiceByName, name)
+	var i Service
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Price,
+		&i.Description,
+		&i.SessionMinutes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateServiceByID = `-- name: UpdateServiceByID :one
+UPDATE services
+SET name = $1, price = $2, description = $3, session_minutes = $4
+WHERE id = $5
+RETURNING id, name, price, description, session_minutes, created_at, updated_at
+`
+
+type UpdateServiceByIDParams struct {
+	Name           string    `json:"name"`
+	Price          string    `json:"price"`
+	Description    string    `json:"description"`
+	SessionMinutes int32     `json:"session_minutes"`
+	ID             uuid.UUID `json:"id"`
+}
+
+func (q *Queries) UpdateServiceByID(ctx context.Context, arg UpdateServiceByIDParams) (Service, error) {
+	row := q.db.QueryRowContext(ctx, updateServiceByID,
+		arg.Name,
+		arg.Price,
+		arg.Description,
+		arg.SessionMinutes,
+		arg.ID,
+	)
 	var i Service
 	err := row.Scan(
 		&i.ID,

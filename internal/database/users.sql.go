@@ -7,6 +7,7 @@ package database
 
 import (
 	"context"
+	"database/sql"
 
 	"github.com/google/uuid"
 )
@@ -65,6 +66,51 @@ WHERE id = $1
 
 func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 	row := q.db.QueryRowContext(ctx, getUserByID, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Email,
+		&i.Role,
+		&i.PasswordHash,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateUserByEmail = `-- name: UpdateUserByEmail :exec
+UPDATE users
+SET password_hash = $1
+WHERE email = $2
+`
+
+type UpdateUserByEmailParams struct {
+	PasswordHash string `json:"password_hash"`
+	Email        string `json:"email"`
+}
+
+func (q *Queries) UpdateUserByEmail(ctx context.Context, arg UpdateUserByEmailParams) error {
+	_, err := q.db.ExecContext(ctx, updateUserByEmail, arg.PasswordHash, arg.Email)
+	return err
+}
+
+const updateUserByID = `-- name: UpdateUserByID :one
+UPDATE users
+SET email = COALESCE($1, email),
+    password_hash = COALESCE($2, password_hash)
+WHERE id = $3
+RETURNING id, name, email, role, password_hash, created_at, updated_at
+`
+
+type UpdateUserByIDParams struct {
+	Email        sql.NullString `json:"email"`
+	PasswordHash sql.NullString `json:"password_hash"`
+	ID           uuid.UUID      `json:"id"`
+}
+
+func (q *Queries) UpdateUserByID(ctx context.Context, arg UpdateUserByIDParams) (User, error) {
+	row := q.db.QueryRowContext(ctx, updateUserByID, arg.Email, arg.PasswordHash, arg.ID)
 	var i User
 	err := row.Scan(
 		&i.ID,
