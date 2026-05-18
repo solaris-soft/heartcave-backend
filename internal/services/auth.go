@@ -31,13 +31,21 @@ func NewAuthService(secretKey string) AuthService {
 	return AuthService{secretKey}
 }
 
-func (a AuthService) MakeAccessToken(userID uuid.UUID) (string, error) {
-	claims := jwt.RegisteredClaims{
-		Subject:   userID.String(),
-		Issuer:    "heartcave",
-		Audience:  jwt.ClaimStrings{"public-api"},
-		IssuedAt:  jwt.NewNumericDate(time.Now()),
-		ExpiresAt: jwt.NewNumericDate(time.Now().Add(AccessTokenExpiry)),
+type HeartCaveClaims struct {
+	Role string `json:"role"`
+	jwt.RegisteredClaims
+}
+
+func (a AuthService) MakeAccessToken(userID uuid.UUID, role string) (string, error) {
+	claims := HeartCaveClaims{
+		Role: role,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   userID.String(),
+			Issuer:    "heartcave",
+			Audience:  jwt.ClaimStrings{"public-api"},
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(AccessTokenExpiry)),
+		},
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -49,8 +57,8 @@ func (a AuthService) ValidatePassword(password string) bool {
 	return len(password) >= 8
 }
 
-func (a AuthService) ValidateAccessToken(tokenString string) (uuid.UUID, error) {
-	claims := &jwt.RegisteredClaims{}
+func (a AuthService) ValidateAccessToken(tokenString string) (uuid.UUID, string, error) {
+	claims := &HeartCaveClaims{}
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (any, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
@@ -58,19 +66,19 @@ func (a AuthService) ValidateAccessToken(tokenString string) (uuid.UUID, error) 
 		return []byte(a.secretKey), nil
 	})
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil, "", err
 	}
 
 	if !token.Valid {
-		return uuid.Nil, jwt.ErrTokenInvalidClaims
+		return uuid.Nil, "", jwt.ErrTokenInvalidClaims
 	}
 
 	userID, err := uuid.Parse(claims.Subject)
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil, "", err
 	}
 
-	return userID, nil
+	return userID, claims.Role, nil
 }
 
 func (a AuthService) NewRefreshToken() (string, error) {

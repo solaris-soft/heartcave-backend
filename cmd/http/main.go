@@ -47,6 +47,12 @@ func main() {
 		// Refresh token route
 		r.With(authHandler.RefreshMiddleware).
 			Post("/refresh", authHandler.Refresh)
+
+		// Admin-only routes
+		r.With(authHandler.AuthMiddleware, handlers.RequireRole("admin")).
+			Group(func(r chi.Router) {
+				_ = r // placeholder -- add admin routes here
+			})
 	})
 
 	srv := NewServer(r, cfg)

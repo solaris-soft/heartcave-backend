@@ -30,6 +30,11 @@ func WriteUnauthorized(w http.ResponseWriter) {
 		map[string]string{"error": "Not authorized"})
 }
 
+func WriteForbidden(w http.ResponseWriter) {
+	WriteJSON(w, http.StatusForbidden,
+		map[string]string{"error": "Forbidden"})
+}
+
 func DecodeJson(r *http.Request, dst any) error {
 	return json.NewDecoder(r.Body).Decode(dst)
 }

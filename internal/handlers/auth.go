@@ -122,7 +122,7 @@ func (h AuthHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	accessToken, err := h.AuthService.MakeAccessToken(user.ID)
+	accessToken, err := h.AuthService.MakeAccessToken(user.ID, string(user.Role))
 	if err != nil {
 		WriteInternalError(w)
 		return
@@ -169,7 +169,7 @@ func (h AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		WriteUnauthorized(w)
 		return
 	}
-	accessToken, err := h.AuthService.MakeAccessToken(user.ID)
+	accessToken, err := h.AuthService.MakeAccessToken(user.ID, string(user.Role))
 	if err != nil {
 		WriteInternalError(w)
 		return
@@ -198,7 +198,13 @@ func (h AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	accessToken, err := h.AuthService.MakeAccessToken(meta.UserID)
+	user, err := h.DB.GetUserByID(r.Context(), meta.UserID)
+	if err != nil {
+		WriteInternalError(w)
+		return
+	}
+
+	accessToken, err := h.AuthService.MakeAccessToken(user.ID, string(user.Role))
 	if err != nil {
 		WriteInternalError(w)
 		return
@@ -238,6 +244,31 @@ type UserIDKey struct{}
 
 var userIDKey = UserIDKey{}
 
+type RoleKey struct{}
+
+var roleKey = RoleKey{}
+
+func RequireRole(roles ...string) func(http.Handler) http.Handler {
+	allowed := make(map[string]struct{}, len(roles))
+	for _, r := range roles {
+		allowed[r] = struct{}{}
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			role, ok := r.Context().Value(roleKey).(string)
+			if !ok {
+				WriteForbidden(w)
+				return
+			}
+			if _, ok := allowed[role]; !ok {
+				WriteForbidden(w)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 func (h AuthHandler) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token, err := h.AuthService.GetBearerToken(r.Header)
@@ -245,12 +276,13 @@ func (h AuthHandler) AuthMiddleware(next http.Handler) http.Handler {
 			WriteUnauthorized(w)
 			return
 		}
-		userID, err := h.AuthService.ValidateAccessToken(token)
+		userID, role, err := h.AuthService.ValidateAccessToken(token)
 		if err != nil {
 			WriteUnauthorized(w)
 			return
 		}
 		ctx := context.WithValue(r.Context(), userIDKey, userID)
+		ctx = context.WithValue(ctx, roleKey, role)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
