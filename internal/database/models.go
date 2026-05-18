@@ -11,6 +11,23 @@ import (
 	"github.com/google/uuid"
 )
 
+type Booking struct {
+	ID                      uuid.UUID      `json:"id"`
+	CustomerID              uuid.UUID      `json:"customer_id"`
+	ServiceID               uuid.UUID      `json:"service_id"`
+	StartsAt                time.Time      `json:"starts_at"`
+	EndsAt                  time.Time      `json:"ends_at"`
+	Status                  string         `json:"status"`
+	ServiceName             string         `json:"service_name"`
+	CustomerNotes           sql.NullString `json:"customer_notes"`
+	StripeCheckoutSessionID sql.NullString `json:"stripe_checkout_session_id"`
+	StripePaymentIntentID   sql.NullString `json:"stripe_payment_intent_id"`
+	PaidAt                  sql.NullTime   `json:"paid_at"`
+	CancelledAt             sql.NullTime   `json:"cancelled_at"`
+	CreatedAt               time.Time      `json:"created_at"`
+	UpdatedAt               time.Time      `json:"updated_at"`
+}
+
 type RefreshToken struct {
 	ID        uuid.UUID      `json:"id"`
 	UserID    uuid.UUID      `json:"user_id"`
@@ -22,10 +39,21 @@ type RefreshToken struct {
 	UserAgent sql.NullString `json:"user_agent"`
 }
 
+type Service struct {
+	ID             uuid.UUID `json:"id"`
+	Name           string    `json:"name"`
+	Price          string    `json:"price"`
+	Description    string    `json:"description"`
+	SessionMinutes int32     `json:"session_minutes"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
 type User struct {
 	ID           uuid.UUID `json:"id"`
 	Name         string    `json:"name"`
 	Email        string    `json:"email"`
+	Role         string    `json:"role"`
 	PasswordHash string    `json:"password_hash"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
